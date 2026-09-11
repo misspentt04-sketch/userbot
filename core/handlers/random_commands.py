@@ -88,6 +88,15 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
         for victim_id in victims:
             if int(victim_id) == me.id:
                 continue
+            
+            # Проверяем исключения
+            from core.utils.db_api.repo import ExceptionsRepo
+            async with session() as ses:
+                is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(victim_id))
+            if is_exc:
+                print(f"[EXCEPTION] Пропускаю {victim_id} (в исключениях)")
+                continue
+            
 
             infect_is_stop = await redis.get(f'epidemic_userbot_infect_stop:{me.id}')
             if infect_is_stop and int(infect_is_stop) == 1:
@@ -115,6 +124,15 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
         for victim_id in victims:
             if int(victim_id) == me.id:
                 continue
+            
+            # Проверяем исключения
+            from core.utils.db_api.repo import ExceptionsRepo
+            async with session() as ses:
+                is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(victim_id))
+            if is_exc:
+                print(f"[EXCEPTION] Пропускаю {victim_id} (в исключениях)")
+                continue
+            
 
             infect_is_stop = await redis.get(f'epidemic_userbot_infect_stop:{me.id}')
             if infect_is_stop and int(infect_is_stop) == 1:
@@ -136,6 +154,16 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
     elif action == 'infect_one':
         victim_id = action_data.get('victim_id')
         if not victim_id:
+            return
+
+        # Проверяем исключения
+        from core.utils.db_api.repo import ExceptionsRepo
+        async with session() as ses:
+            is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(victim_id))
+        if is_exc:
+            print(f"[EXCEPTION] Пропускаю {victim_id} (в исключениях)")
+            sended_msg = await msg.reply(f"🚫 @{victim_id} в исключениях. Пропускаю.")
+            asyncio.create_task(respond_func.delete_msg([sended_msg], tricks['config']['medium_timeout']))
             return
 
         try:

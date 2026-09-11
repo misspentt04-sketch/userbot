@@ -1,5 +1,9 @@
 from .base import Base
-from .models import UserUserBot, UserUserBotData, UserbotUserSettings, UserbotTrustedUsers, UserbotVictims, Victims, User, VictimKD
+from .models import (
+    UserUserBot, UserUserBotData, UserbotUserSettings, 
+    UserbotTrustedUsers, UserbotVictims, Victims, User, 
+    VictimKD, UserbotExceptions
+)
 
 __all__ = [
     "Base",
@@ -10,5 +14,6 @@ __all__ = [
     'UserbotVictims',
     'Victims',
     'User',
-    'VictimKD'
+    'VictimKD',
+    'UserbotExceptions'
 ]

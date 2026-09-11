@@ -160,3 +160,12 @@ class VictimKD(BaseModel):
     owner_id = Column(BigInteger, index=True, nullable=False)
     victim_id = Column(BigInteger, index=True, nullable=False)
     kd_expire = Column(BigInteger, nullable=False)
+
+
+class UserbotExceptions(BaseModel):
+    __tablename__ = 'UserbotExceptions'
+    
+    id = Column(BigInteger, unique=True, autoincrement=True, nullable=False, primary_key=True)
+    owner_id = Column(BigInteger, index=True, nullable=False)
+    victim_id = Column(BigInteger, index=True, nullable=False)
+    victim_name = Column(String(255), nullable=True)

@@ -112,6 +112,13 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         # Не добавляем себя
         if int(victim_id) == me.id:
             continue
+        
+        # Проверяем исключения
+        from core.utils.db_api.repo import ExceptionsRepo
+        async with session() as ses:
+            is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(victim_id))
+        if is_exc:
+            continue
 
         exp_match = re.search(r'\| ([\d,\s]+) опыт', line)
         if not exp_match:

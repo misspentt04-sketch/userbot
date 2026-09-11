@@ -12,11 +12,10 @@ from .helpers import helper
 from .infect_manager import self_victim_infect, auto_write_infect, stop_infect
 from .zarlist import zarlist_command, zarlist_plus_command
 from .random_commands import random_command_handler
+from .exceptions import exceptions_list_command, exception_add_command
 
 
 async def setup_handlers(apps_dp: Tuple[List[Client], List[Dispatcher]]) -> None:
-    """Регистрирует хендлеры в роутерах для каждого диспетчера"""
-
     for dp in apps_dp[1]:
         router = Router(name=f"router_{id(dp)}")
 
@@ -28,5 +27,7 @@ async def setup_handlers(apps_dp: Tuple[List[Client], List[Dispatcher]]) -> None
         router.message.register(zarlist_command)
         router.message.register(zarlist_plus_command)
         router.message.register(random_command_handler)
+        router.message.register(exceptions_list_command)
+        router.message.register(exception_add_command)
 
         dp.add_router(router)

@@ -143,6 +143,15 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                 if get_victim:
                     exp = get_victim[0].victim_bio_resource_earn
 
+        # Проверяем исключения
+        from core.utils.db_api.repo import ExceptionsRepo
+        if link and str(link).isdigit():
+            async with session() as ses:
+                is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(link))
+            if is_exc:
+                err = await msg.reply(f"🚫 <a href=\"tg://openmessage?user_id={link}\">{link}</a> в исключениях. Пропускаю.")
+                return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['medium_timeout']))
+
         msg_infect = await msg_to.reply(text)
         await redis.lpush(f'epidemic_userbot_victim:{me.id}:{link}', f'{msg_infect.id}:{exp}')
         await redis.expire(f'epidemic_userbot_victim:{me.id}:{link}', 6)
@@ -411,8 +420,15 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                     victim = await Repo.get_victim(ses, me.id, id)
                     victim_user = await Repo.get_user(ses, id)
 
-                    if int(id) != me.id:
-                        victim_ids_for_infect.append(int(id))
+                    # Проверяем исключения
+                    from core.utils.db_api.repo import ExceptionsRepo
+                    is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(id))
+
+                    # Пропускаем себя и исключённых
+                    if int(id) == me.id or is_exc:
+                        continue
+
+                    victim_ids_for_infect.append(int(id))
 
                     if victim:
                         mention = base_func.entity_create(id, victim_user[0].full_name)
