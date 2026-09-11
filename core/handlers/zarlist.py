@@ -84,8 +84,13 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
 
     prefix = await redis.hget(f'epidemic_userbot:{me.id}', 'prefix')
 
-    # Работает как: азз+, азз +, а зз+, а зз +, ас+, ас +, а с+, а с +
-    if not re.fullmatch(rf'{re.escape(prefix)}\s*(?:зз|с)\s*\+', msg.text, re.IGNORECASE):
+    # Работает как: азз+, азз +, ас+, ас +, ас н, азз н, ас -, азз -
+    text_lower = msg.text.lower().strip()
+    is_plus = bool(re.fullmatch(rf'{re.escape(prefix)}\s*(?:зз|с)\s*\+', text_lower, re.IGNORECASE))
+    is_new = bool(re.fullmatch(rf'{re.escape(prefix)}\s*(?:зз|с)\s*н', text_lower, re.IGNORECASE))
+    is_minus = bool(re.fullmatch(rf'{re.escape(prefix)}\s*(?:зз|с)\s*-', text_lower, re.IGNORECASE))
+    
+    if not (is_plus or is_new or is_minus):
         return
 
     if not msg.reply_to_message:
@@ -143,15 +148,14 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
             victim_id = int(user_id_match.group(1))
             exp_match = re.search(r"\|\s*([\d,\.]+)(k|к|M|м|K|К)?\s*опыт", line)
             if exp_match:
-                exp_value = exp_match.group(1).replace(",", ".")
+                exp_raw = exp_match.group(1).replace(",", "").replace(".", "")
                 try:
-                    total_exp = float(exp_value)
+                    total_exp = int(exp_raw)
                     suffix = exp_match.group(2)
                     if suffix and suffix.lower() in ["k", "к"]:
                         total_exp *= 1000
                     elif suffix and suffix.lower() in ["m", "м"]:
                         total_exp *= 1000000
-                    total_exp = int(total_exp)
                 except:
                     total_exp = 0
             else:
@@ -189,8 +193,19 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         potential_earn = int(total_exp * 0.10)
         diff = potential_earn - current_earn
 
-        if diff > 0:
-            victims.append((victim_id, total_exp, current_earn, potential_earn, diff))
+        # ===== ФИЛЬТРАЦИЯ =====
+        if is_plus:
+            # Только выгодные (в плюс)
+            if diff > 0:
+                victims.append((victim_id, total_exp, current_earn, potential_earn, diff))
+        elif is_new:
+            # Только НОВЫЕ (нет в БД — current_earn == 0)
+            if current_earn == 0:
+                victims.append((victim_id, total_exp, current_earn, potential_earn, diff))
+        elif is_minus:
+            # Только те, кто в МИНУСЕ
+            if diff < 0:
+                victims.append((victim_id, total_exp, current_earn, potential_earn, diff))
 
     if not victims:
         err = await msg.reply("📝 Нет выгодных жертв в этом списке.")
@@ -242,11 +257,19 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         
         try:
             # Отправляем файл
-            with open(file_path, 'rb') as f:
+            # Заголовок для caption
+            if is_plus:
+                caption_title = f"🎯 Выгодные жертвы ({len(victims)})"
+            elif is_new:
+                caption_title = f"🆕 Новые жертвы ({len(victims)})"
+            else:
+                caption_title = f"📉 Жертвы в минусе ({len(victims)})"
+            
+            with open(file_path, "rb") as f:
                 await msg.reply_document(
                     document=f,
                     file_name=f"victims_{len(victims)}_{code}.txt",
-                    caption=f"🎯 Выгодные жертвы ({len(victims)})\n\nНапиши /{code} для заражения"
+                    caption=f"{caption_title}\n\nНапиши /{code} для заражения"
                 )
             import os
             os.remove(file_path)
@@ -254,18 +277,32 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         except Exception as e:
             print(f"[FILE ERROR] {e}")
             err = await msg.reply(f"❌ Ошибка отправки файла: {e}")
+
+        # Заголовок для топ-10
+        if is_plus:
+            top_title = f"🎯 <b>Выгодные жертвы (топ-10 из {len(victims)}):</b>"
+        elif is_new:
+            top_title = f"🆕 <b>Новые жертвы (топ-10 из {len(victims)}):</b>"
+        else:
+            top_title = f"📉 <b>Жертвы в минусе (топ-10 из {len(victims)}):</b>"
         
-        # Отправляем первые 10 в сообщении
         top_10 = victims_list[:10]
         await msg.reply_to_message.reply(
-            f"🎯 <b>Выгодные жертвы (топ-10 из {len(victims)}):</b>\n\n" + "\n".join(top_10) + f"\n\n<i>Остальные в файле выше. Код: /{code}</i>"
+            f"{top_title}\n\n" + "\n".join(top_10) + f"\n\n<i>Остальные в файле выше. Код: /{code}</i>"
         )
     else:
         # Маленький список — отправляем сообщением
+        if is_plus:
+            title = f"🎯 <b>Выгодные жертвы ({len(victims)}):</b>"
+        elif is_new:
+            title = f"🆕 <b>Новые жертвы ({len(victims)}):</b>"
+        else:
+            title = f"📉 <b>Жертвы в минусе ({len(victims)}):</b>"
+        
         result = (
-            f"🎯 <b>Выгодные жертвы ({len(victims)}):</b>\n\n"
+            f"{title}\n\n"
             + "\n".join(victims_list)
         )
         result += f"\n\n/{code}"
-        
+
         await msg.reply(result)
