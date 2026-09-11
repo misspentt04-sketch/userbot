@@ -151,3 +151,12 @@ class UserbotVictims(BaseModel):
     victim_expire = Column(DateTime, default=datetime.utcnow(), nullable=False)
     bio_resource = Column(BigInteger, nullable=False)
 
+
+
+class VictimKD(BaseModel):
+    __tablename__ = 'VictimKD'
+    
+    id = Column(BigInteger, unique=True, autoincrement=True, nullable=False, primary_key=True)
+    owner_id = Column(BigInteger, index=True, nullable=False)
+    victim_id = Column(BigInteger, index=True, nullable=False)
+    kd_expire = Column(BigInteger, nullable=False)

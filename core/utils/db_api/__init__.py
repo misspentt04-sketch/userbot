@@ -1,13 +1,14 @@
 from .base import Base
-from .models import UserUserBot, UserUserBotData, UserbotUserSettings, UserbotTrustedUsers, UserbotVictims, Victims, User
+from .models import UserUserBot, UserUserBotData, UserbotUserSettings, UserbotTrustedUsers, UserbotVictims, Victims, User, VictimKD
 
 __all__ = [
-    "Base"
+    "Base",
     'UserUserBot',
     'UserUserBotData',
     'UserbotUserSettings',
     'UserbotTrustedUsers',
     'UserbotVictims',
     'Victims',
-    'User'
+    'User',
+    'VictimKD'
 ]

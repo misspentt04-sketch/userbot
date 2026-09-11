@@ -122,7 +122,7 @@ async def main():
     logging.basicConfig(level=logging.ERROR,
                         format = '%(asctime)s - [%(levelname)s] - %(name)s - '
                         '(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s')
-    engine = create_async_engine(url=settings.db_url.get_secret_value(), echo=False, isolation_level='AUTOCOMMIT')
+    engine = create_async_engine(url=settings.db_url.get_secret_value(), echo=False, isolation_level='AUTOCOMMIT', pool_pre_ping=True, pool_recycle=3600, pool_size=10, max_overflow=20)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     redis = Redis(host=settings.redis_ip.get_secret_value(), port=6379, db=0, decode_responses=True)
     scheduler = AsyncIOScheduler()

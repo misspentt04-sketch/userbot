@@ -1,9 +1,9 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy.sql import select, insert, delete, update
 
-from core.utils.db_api import UserbotVictims, UserbotUserSettings, Victims, User
+from core.utils.db_api import UserbotVictims, UserbotUserSettings, Victims, User, VictimKD
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class Repo:
@@ -37,3 +37,34 @@ class Repo:
     async def change_prefix(session: AsyncSession, id: int, prefix: str):
         async with session.begin():
             await session.execute(update(UserbotUserSettings).where(UserbotUserSettings.user_id==id).values(prefix=prefix))
+
+    async def save_victim_kd(session: AsyncSession, owner_id: int, victim_id: int):
+        """Сохраняет КД жертвы на 2 часа"""
+        import time
+        kd_expire = int(time.time()) + 2 * 60 * 60
+        
+        async with session.begin():
+            await session.execute(
+                delete(VictimKD).where(
+                    VictimKD.owner_id == owner_id,
+                    VictimKD.victim_id == victim_id
+                )
+            )
+            await session.execute(
+                insert(VictimKD).values(
+                    owner_id=owner_id,
+                    victim_id=victim_id,
+                    kd_expire=kd_expire
+                )
+            )
+
+    async def get_victim_kd(session: AsyncSession, owner_id: int, victim_id: int):
+        """Получает КД жертвы"""
+        async with session.begin():
+            result = await session.execute(
+                select(VictimKD).where(
+                    VictimKD.owner_id == owner_id,
+                    VictimKD.victim_id == victim_id
+                )
+            )
+            return result.scalars().first()
