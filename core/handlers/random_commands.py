@@ -19,19 +19,16 @@ import html
 
 
 def generate_random_code(length: int = 5) -> str:
-    """Генерирует случайный код из английских букв"""
     return ''.join(random.choices(string.ascii_lowercase, k=length))
 
 
 async def save_random_command(redis: Redis, user_id: int, code: str, action: str, data: dict):
-    """Сохраняет рандомную команду в Redis на 1 минуту"""
     key = f'epidemic_userbot_random:{user_id}:{code}'
     value = json.dumps({'action': action, 'data': data})
     await redis.set(key, value, ex=60)
 
 
 async def check_random_command(redis: Redis, user_id: int, code: str) -> dict:
-    """Проверяет рандомную команду"""
     key = f'epidemic_userbot_random:{user_id}:{code}'
     value = await redis.get(key)
     if value:
@@ -39,8 +36,17 @@ async def check_random_command(redis: Redis, user_id: int, code: str) -> dict:
     return None
 
 
+async def send_buy_vaccine(app: Client):
+    """Отправляет .Купить вакцину в ЛС бота"""
+    try:
+        await app.send_message(tricks['game']['bot_username'], '.Купить вакцину')
+        await asyncio.sleep(2)
+        print("[VACCINE] Отправил .Купить вакцину")
+    except Exception as e:
+        print(f"[VACCINE ERROR] {e}")
+
+
 async def random_command_handler(app: Client, msg: Message, me: User, session: async_sessionmaker[AsyncSession], redis: Redis):
-    """Обрабатывает рандомные команды для заражения"""
 
     trusted_ids = await redis.lrange(f'epidemic_userbot_trusted:{me.id}', 0, -1)
 
@@ -68,8 +74,10 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
     except:
         pass
 
-    # Сбрасываем флаг остановки
     await redis.set(f'epidemic_userbot_infect_stop:{me.id}', 0)
+
+    # Отправляем .Купить вакцину перед заражением
+    await send_buy_vaccine(app)
 
     if action == 'infect_all':
         victims = action_data.get('victims', [])
@@ -78,7 +86,9 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
 
         count = 0
         for victim_id in victims:
-            # Проверяем флаг остановки
+            if int(victim_id) == me.id:
+                continue
+
             infect_is_stop = await redis.get(f'epidemic_userbot_infect_stop:{me.id}')
             if infect_is_stop and int(infect_is_stop) == 1:
                 await redis.set(f'epidemic_userbot_infect_stop:{me.id}', 0)
@@ -89,15 +99,6 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
             try:
                 await app.send_message(msg.chat.id, f'Заразить @{victim_id}')
                 count += 1
-                
-                # Записываем КД
-                try:
-                    async with session() as ses:
-                        await Repo.save_victim_kd(ses, me.id, victim_id)
-                    print(f"[KD SAVE] Сохранил КД для {victim_id}")
-                except Exception as e:
-                    print(f"[KD SAVE ERROR] {e}")
-                
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"[RANDOM INJECT ERROR] {e}")
@@ -112,6 +113,9 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
 
         count = 0
         for victim_id in victims:
+            if int(victim_id) == me.id:
+                continue
+
             infect_is_stop = await redis.get(f'epidemic_userbot_infect_stop:{me.id}')
             if infect_is_stop and int(infect_is_stop) == 1:
                 await redis.set(f'epidemic_userbot_infect_stop:{me.id}', 0)
@@ -122,10 +126,6 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
             try:
                 await app.send_message(msg.chat.id, f'Заразить @{victim_id}')
                 count += 1
-                
-                async with session() as ses:
-                    await Repo.save_victim_kd(ses, me.id, victim_id)
-                
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"[RANDOM INJECT ERROR] {e}")
@@ -140,15 +140,6 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
 
         try:
             await app.send_message(msg.chat.id, f'Заразить @{victim_id}')
-            
-            # Записываем КД
-            try:
-                async with session() as ses:
-                    await Repo.save_victim_kd(ses, me.id, victim_id)
-                print(f"[KD SAVE] Сохранил КД для {victim_id}")
-            except Exception as e:
-                print(f"[KD SAVE ERROR] {e}")
-            
             sended_msg = await msg.reply(f"🦠 Заражён @{victim_id}")
         except Exception as e:
             sended_msg = await msg.reply(f"❌ Ошибка: {e}")

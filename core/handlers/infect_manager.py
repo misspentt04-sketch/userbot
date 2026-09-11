@@ -89,7 +89,7 @@ async def auto_write_infect(app: Client, msg: Message, me: User, session: async_
                     print(f"[KD FROM BOT ERROR] {e}")
         return
 
-    # ===== 2. ПАРСИМ ЗАРАЖЕНИЕ =====
+    # ===== 2. ПАРСИМ ЗАРАЖЕНИЕ (успешное) =====
     if (
         msg.text and
         re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.text.splitlines()[0], re.IGNORECASE) and
@@ -143,14 +143,34 @@ async def auto_write_infect(app: Client, msg: Message, me: User, session: async_
             ('✨ ' if '✨' in msg.text.splitlines()[-1] else ''), victimer_id,
             bio_resource, victimer_mention
         )
+        
+        # Записываем КД ТОЛЬКО при успешном заражении
+        try:
+            kd_expire = int(time.time()) + 2 * 60 * 60
+            async with session() as ses:
+                async with ses.begin():
+                    await ses.execute(
+                        delete(VictimKD).where(
+                            VictimKD.owner_id == me.id,
+                            VictimKD.victim_id == victimer_id
+                        )
+                    )
+                    await ses.execute(
+                        insert(VictimKD).values(
+                            owner_id=me.id,
+                            victim_id=victimer_id,
+                            kd_expire=kd_expire
+                        )
+                    )
+            print(f"[KD SAVE] Сохранил КД для {victimer_id} (успех)")
+        except Exception as e:
+            print(f"[KD SAVE ERROR] {e}")
 
-        # Пытаемся отредактировать сообщение
         try:
             await app.edit_message_text(msg.chat.id, links, text)
             print(f"[EDIT OK] Отредактировал сообщение")
         except Exception as e:
             print(f"[EDIT ERROR] {e}")
-            # Если не удалось — отправляем новое
             try:
                 await app.send_message(msg.chat.id, text)
                 print(f"[SEND OK] Отправил новое сообщение")

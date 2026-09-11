@@ -8,7 +8,10 @@ import unicodedata
 import html
 import re
 
-def link_getter(text: str) -> [str, bool]:
+
+def link_getter(text) -> [str, bool]:
+    if not text or not isinstance(text, str):
+        return None
     expression = r'((https://t\.me/|@)[\w\d]{5,32}|tg://openmessage\?user_id=\d{6,14})'
     result = re.search(expression, text)
     if result:
@@ -20,8 +23,10 @@ def link_getter(text: str) -> [str, bool]:
     else:
         return None
 
+
 def strip_non_ascii(string) -> str:
     return ' '.join(re.findall(r'[\d\w\s]+', string))
+
 
 def anti_specific_symbols_name(name: str, username: [str, bool], id: int) -> str:
     asci_name = strip_non_ascii(name)
@@ -32,29 +37,31 @@ def anti_specific_symbols_name(name: str, username: [str, bool], id: int) -> str
     else:
         return str(id)
 
+
 def clear_name_universal(name: str, username: [str, bool], id: int) -> [int, str]:
     re_pattern1 = re.compile(r'[^\u0000-\u007F\u00A0-\uFFFF]+')
-
 
     clear_name = anti_specific_symbols_name(
         html.escape(name), username, id
     )
     clear_name = re_pattern1.sub('', unicodedata.normalize('NFKC', clear_name))
     clear_name = re.sub(r'[^ -~А-Яа-яЁё]', '', clear_name)
-    
+
     if re.fullmatch(r'[\s‎ ]+', clear_name) or not clear_name:
         clear_name = (username if username else id)
-    
+
     return clear_name
+
 
 def entity_create(id: int, name: str, entity: str=deep_links['mention']) -> str:
     return f'<a href="{entity}{id}">{name}</a>'
 
+
 @lru_cache
 def skills_calc(skill: str, from_lvl: int, to_lvl: int):
-    
+
     skill_string, price = '', 0
-    
+
     for i in range(from_lvl, to_lvl):
         if [i for i in ['заразность', 'зараз', 'зз'] if i == skill]:
             price += (i + 1)**2.5
@@ -74,6 +81,5 @@ def skills_calc(skill: str, from_lvl: int, to_lvl: int):
         elif [i for i in ['безопасность', 'сб', 'служба'] if i == skill]:
             price += (i + 1)**2.1
             skill_string = f'🧬 Улучшение <b>безопасности</b> с <i>{from_lvl} до {to_lvl}</i> уровня стоит'
-    
-    return f'{skill_string} <b>{intcomma(int(price))}</b> био-ресурсов.'
 
+    return f'{skill_string} <b>{intcomma(int(price))}</b> био-ресурсов.'

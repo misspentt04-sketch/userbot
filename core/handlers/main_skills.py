@@ -42,7 +42,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         re.fullmatch(f'{prefix}б' + r'(\s{1,3}\d{1,2}|)', msg.text.lower()) and msg.reply_to_message and (
             reply_text and msg.reply_to_message.text.lower().startswith(tricks['game_texts']['sec_serv']) or
             reply_text and
-            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0 ], re.IGNORECASE)
+            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0], re.IGNORECASE)
             or reply_text and '🪬 Иммунитет объекта' in msg.reply_to_message.text and
             msg.reply_to_message.entities and
             len(msg.reply_to_message.entities) == 1
@@ -73,7 +73,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             msg_to = msg.reply_to_message
         elif (
             msg.reply_to_message and
-            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0 ], re.IGNORECASE) and
+            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0], re.IGNORECASE) and
             len(msg.reply_to_message.entities) >= 2
         ):
             link = base_func.link_getter(msg.reply_to_message.entities[1].url)
@@ -130,16 +130,6 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
 
                     await redis.lpush(f'epidemic_userbot_victim:{me.id}:{lnk}', f'{msg_infect.id}:{exp}')
                     await redis.expire(f'epidemic_userbot_victim:{me.id}:{lnk}', 6)
-                    
-                    # Записываем КД
-                    if lnk and str(lnk).isdigit():
-                        try:
-                            async with session() as ses:
-                                await Repo.save_victim_kd(ses, me.id, int(lnk))
-                            print(f"[KD SAVE] Сохранил КД для {lnk} (через аб список)")
-                        except Exception as e:
-                            print(f"[KD SAVE ERROR] {e}")
-                    
                     await asyncio.sleep(tricks['config']['list_infect_delay'])
             text = f'Заразить @{link}'
             quote = True
@@ -156,25 +146,14 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         msg_infect = await msg_to.reply(text)
         await redis.lpush(f'epidemic_userbot_victim:{me.id}:{link}', f'{msg_infect.id}:{exp}')
         await redis.expire(f'epidemic_userbot_victim:{me.id}:{link}', 6)
-        
-        # Записываем КД
-        if link and str(link).isdigit():
-            try:
-                async with session() as ses:
-                    await Repo.save_victim_kd(ses, me.id, int(link))
-                print(f"[KD SAVE] Сохранил КД для {link} (через аб)")
-            except Exception as e:
-                print(f"[KD SAVE ERROR] {e}")
-        
-        # НЕ удаляем сообщение, чтобы auto_write_infect мог его отредактировать
-        # if not list_infect: await msg.delete()
+        if not list_infect: await msg.delete()
 
     # Buy vaccine
     if msg.text.lower() == f'{prefix}х':
         await msg.reply(tricks['triggers']['buy_vaccine'])
         await msg.delete()
 
-    # Get small info about lab
+    # Get small info about lab (ала, ал, амл, алаб)
     if msg.text.lower() in [f'{prefix}ла', f'{prefix}л', f'{prefix}мл', f'{prefix}лаб']:
         lab_receive = await redis.hget(f'epidemic_userbot:{me.id}', 'lab_receive_progress')
         if lab_receive and int(lab_receive):
@@ -252,39 +231,93 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
 
         await msg.edit(text)
 
-    # check victim
+    # check victim (оп, о, с) — работает с ЛЮБЫМ реплаем, КРОМЕ списков
     if (
-        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о)\s' + trg.re_link_sup, msg.text, re.IGNORECASE)
+        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о|с)\s' + trg.re_link_sup, msg.text, re.IGNORECASE)
         or
-        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о)', msg.text, re.IGNORECASE) and
-        msg.reply_to_message and (
-            reply_text and msg.reply_to_message.text.lower().startswith(tricks['game_texts']['sec_serv']) or
-            reply_text and
-            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0 ], re.IGNORECASE)
-            or reply_text and '🪬 Иммунитет объекта' in msg.reply_to_message.text and
-            msg.reply_to_message.entities and
-            len(msg.reply_to_message.entities) == 1
-    )):
+        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о|с)', msg.text, re.IGNORECASE) and msg.reply_to_message and (
+            not msg.reply_to_message.text or
+            msg.reply_to_message.text.splitlines()[0] not in tricks['game_texts']['notexec_allow_list']
+        )
+    ):
         victim_id = base_func.link_getter(msg.text)
         victim = victim_name = victim_mention = None
 
         if (
             msg.reply_to_message and
+            msg.reply_to_message.text and
             msg.reply_to_message.text.lower().startswith(tricks['game_texts']['sec_serv']) and
-            len(msg.reply_to_message.entities) >= 3
-        ):
-            victim_id = base_func.link_getter(msg.reply_to_message.entities[2].url)
-        elif (
-            msg.reply_to_message and
-            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0 ], re.IGNORECASE) and
             len(msg.reply_to_message.entities) >= 2
         ):
-            victim_id = base_func.link_getter(msg.reply_to_message.entities[1].url)
+            # Берём ВТОРОГО игрока (организатора) — entities[1]
+            try:
+                url = msg.reply_to_message.entities[1].url
+                if url:
+                    victim_id = base_func.link_getter(url)
+            except:
+                pass
         elif (
-            msg.reply_to_message and '🪬 Иммунитет объекта' in msg.reply_to_message.text and
+            msg.reply_to_message and
+            msg.reply_to_message.text and
+            re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0], re.IGNORECASE) and
+            len(msg.reply_to_message.entities) >= 2
+        ):
+            try:
+                url = msg.reply_to_message.entities[1].url
+                if url:
+                    victim_id = base_func.link_getter(url)
+            except:
+                pass
+        elif (
+            msg.reply_to_message and
+            msg.reply_to_message.text and
+            '🪬 Иммунитет объекта' in msg.reply_to_message.text and
             msg.reply_to_message.entities and len(msg.reply_to_message.entities) == 1
         ):
-            victim_id = base_func.link_getter(msg.reply_to_message.entities[0].url)
+            try:
+                url = msg.reply_to_message.entities[0].url
+                if url:
+                    victim_id = base_func.link_getter(url)
+            except:
+                pass
+        elif (
+            msg.reply_to_message and
+            msg.reply_to_message.text and
+            '🕵️‍♂️ Служба безопасности' in msg.reply_to_message.text and
+            'Иммунитет объекта' in msg.reply_to_message.text and
+            msg.reply_to_message.entities and len(msg.reply_to_message.entities) >= 1
+        ):
+            try:
+                url = msg.reply_to_message.entities[0].url
+                if url:
+                    victim_id = base_func.link_getter(url)
+            except:
+                pass
+        elif (
+            msg.reply_to_message and
+            msg.reply_to_message.text and
+            'Иммунитет' in msg.reply_to_message.text and
+            'оказался сильнее' in msg.reply_to_message.text and
+            msg.reply_to_message.entities and len(msg.reply_to_message.entities) >= 1
+        ):
+            try:
+                url = msg.reply_to_message.entities[0].url
+                if url:
+                    victim_id = base_func.link_getter(url)
+            except:
+                pass
+        elif msg.reply_to_message and msg.reply_to_message.from_user:
+            victim_id = msg.reply_to_message.from_user.id
+            victim_name = msg.reply_to_message.from_user.full_name
+        elif msg.reply_to_message and msg.reply_to_message.entities:
+            for entity in msg.reply_to_message.entities:
+                if hasattr(entity, 'url') and entity.url and 'user_id=' in entity.url:
+                    victim_id = int(entity.url.split('user_id=')[1])
+                    break
+
+        if not victim_id:
+            err = await msg.reply(tricks['errors']['user_not_found'])
+            return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['medium_timeout']))
 
         if not str(victim_id).isdigit():
             try:
@@ -319,7 +352,6 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             if victim_mention:
                 text = tricks['game_texts']['check_victim_new_entity'].format(victim_mention, victim_id)
 
-        # Проверяем КД из нашей таблицы
         now = int(time.time())
         async with session() as ses:
             kd_record = await Repo.get_victim_kd(ses, me.id, victim_id)
@@ -337,7 +369,6 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                     kd_str = f" ⏳ {kd_mins}м"
                 text += kd_str
 
-        # Генерируем рандомный код
         from .random_commands import generate_random_code, save_random_command
         code = generate_random_code(5)
         await save_random_command(redis, me.id, code, 'infect_one', {'victim_id': victim_id})
@@ -346,14 +377,13 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         sended_msg = await msg.reply(text)
         asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['smal_plus_timeout']))
 
-    # notexec
+    # notexec (азз, ас)
     if msg.text.lower() in [f'{prefix}зз', f'{prefix}с'] and msg.reply_to_message and msg.reply_to_message.text:
 
         title = msg.reply_to_message.text.splitlines()[0]
 
         if title not in tricks['game_texts']['notexec_allow_list']:
-            err = await msg.reply(tricks['errors']['notexec_list_not_supported'])
-            return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['medium_timeout']))
+            return
 
         biotop_chat = tricks['game_texts']['biotop_chat']
         biotop = tricks['game_texts']['biotop']
