@@ -40,7 +40,7 @@ async def send_buy_vaccine(app: Client):
     """Отправляет .Купить вакцину в ЛС бота"""
     try:
         await app.send_message(tricks['game']['bot_username'], '.Купить вакцину')
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.3)
         print("[VACCINE] Отправил .Купить вакцину")
     except Exception as e:
         print(f"[VACCINE ERROR] {e}")
@@ -108,7 +108,7 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
             try:
                 await app.send_message(msg.chat.id, f'Заразить @{victim_id}')
                 count += 1
-                await asyncio.sleep(2)
+                await asyncio.sleep(1.2)
             except Exception as e:
                 print(f"[RANDOM INJECT ERROR] {e}")
 
@@ -144,7 +144,7 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
             try:
                 await app.send_message(msg.chat.id, f'Заразить @{victim_id}')
                 count += 1
-                await asyncio.sleep(2)
+                await asyncio.sleep(1.2)
             except Exception as e:
                 print(f"[RANDOM INJECT ERROR] {e}")
 

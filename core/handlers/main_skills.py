@@ -37,6 +37,9 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
 
     # Infect
     if msg.text is not None and (
+        # Просто "аб" реплаем на любое сообщение
+        re.fullmatch(f'{re.escape(prefix)}б', msg.text, re.IGNORECASE) and msg.reply_to_message
+        or
         re.fullmatch(f'{re.escape(prefix)}б' + r'\s{1,3}' + r'(\d{1,2}\s{1,3}|)' + trg.re_link_sup, msg.text, re.IGNORECASE)
         or
         re.fullmatch(f'{prefix}б' + r'(\s{1,3}\d{1,2}|)', msg.text.lower()) and msg.reply_to_message and (
@@ -82,6 +85,13 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             msg.reply_to_message.entities and len(msg.reply_to_message.entities) == 1
         ):
             link = base_func.link_getter(msg.reply_to_message.entities[0].url)
+        elif (
+            msg.reply_to_message and
+            msg.reply_to_message.from_user and
+            not re.fullmatch(f'{re.escape(prefix)}б' + r'\s{1,3}([-\d\s]{1,20})', msg.text, re.IGNORECASE)
+        ):
+            # Обычный реплай — берём ID из from_user
+            link = msg.reply_to_message.from_user.id
         elif (
             msg.reply_to_message and
             re.fullmatch(f'{re.escape(prefix)}б' + r'\s{1,3}([-\d\s]{1,20})', msg.text, re.IGNORECASE)

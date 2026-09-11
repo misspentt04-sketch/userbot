@@ -92,11 +92,66 @@ async def auto_write_infect(app: Client, msg: Message, me: User, session: async_
     # ===== 2. ПАРСИМ ЗАРАЖЕНИЕ (успешное) =====
     if (
         msg.text and
-        re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.text.splitlines()[0], re.IGNORECASE) and
-        msg.entities and len(msg.entities) >= 3 and int(msg.entities[0].url.split('user_id=')[1]) == me.id
+        re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.text.splitlines()[0], re.IGNORECASE)
     ):
-        victimer_id = int(base_func.link_getter(msg.entities[1].url))
-        victimer_username = str(base_func.link_getter(msg.entities[2].url))
+        # ===== УНИВЕРСАЛЬНЫЙ ПАРСИНГ =====
+        victimer_id = None
+        victimer_username = None
+        
+        try:
+            html_text = msg.text.html
+        except:
+            html_text = msg.text or ""
+        
+        # Все user_id из ссылок
+        all_ids = re.findall(r'user_id=(\d+)', html_text)
+        all_ids.extend(re.findall(r'tg://user\?id=(\d+)', html_text))
+        
+        # Все @username
+        all_usernames = re.findall(r'(?<!user_id=)@([a-zA-Z0-9_]{5,32})', html_text)
+        
+        print(f"[DEBUG] HTML: {html_text[:200]}")
+        print(f"[DEBUG] IDs: {all_ids}, Usernames: {all_usernames}")
+        
+        # Определяем жертву
+        if all_ids:
+            if len(all_ids) >= 2 and int(all_ids[0]) == me.id:
+                victimer_id = int(all_ids[1])
+            elif len(all_ids) == 1:
+                victimer_id = int(all_ids[0])
+            else:
+                for vid in all_ids:
+                    if int(vid) != me.id:
+                        victimer_id = int(vid)
+                        break
+        
+        if not victimer_id and all_usernames:
+            victimer_username = all_usernames[0]
+            try:
+                entity = await app.get_users(victimer_username)
+                victimer_id = entity.id
+            except Exception as e:
+                print(f"[USERNAME ERROR] {e}")
+        
+        # Fallback: entities[1]
+        if not victimer_id and msg.entities and len(msg.entities) >= 2:
+            try:
+                url = msg.entities[1].url
+                if url:
+                    parsed = base_func.link_getter(url)
+                    if parsed:
+                        if str(parsed).isdigit():
+                            victimer_id = int(parsed)
+                        else:
+                            victimer_username = parsed
+                            entity = await app.get_users(victimer_username)
+                            victimer_id = entity.id
+            except Exception as e:
+                print(f"[ENTITIES ERROR] {e}")
+        
+        if not victimer_id:
+            print("[DEBUG] Не удалось определить жертву")
+            return
 
         is_random = await redis.lrange(f'epidemic_userbot_victim:{me.id}:!random', 0, 0)
 
@@ -122,7 +177,17 @@ async def auto_write_infect(app: Client, msg: Message, me: User, session: async_
         victimer_name = re.findall(r'«.+»\s(.+)', msg.text)
         if not victimer_name:
             victimer_name = re.findall(r'неизвестным патогеном\s(.+)', msg.text)
-        victimer_name = victimer_name[0]
+        
+        if victimer_name:
+            victimer_name = victimer_name[0]
+        else:
+            # Если имя не найдено — берём из БД
+            async with session() as ses:
+                victim_user = await Repo.get_user(ses, victimer_id)
+            if victim_user:
+                victimer_name = victim_user[0].full_name
+            else:
+                victimer_name = str(victimer_id)
         victim_expire_days = int(re.findall(r'🤒 Заражение на ([\d\s]+) дней', msg.text)[0])
         victim_expire = datetime.utcnow() + timedelta(days=victim_expire_days)
         bio_resource = re.findall(r'☣️ \+([\d,]+) био-опыта', msg.text)[0].replace(',', '')
