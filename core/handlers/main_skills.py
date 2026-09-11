@@ -175,7 +175,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         await msg.delete()
 
     # Get small info about lab
-    if msg.text.lower() == f'{prefix}ла':
+    if msg.text.lower() in [f'{prefix}ла', f'{prefix}л', f'{prefix}мл', f'{prefix}лаб']:
         lab_receive = await redis.hget(f'epidemic_userbot:{me.id}', 'lab_receive_progress')
         if lab_receive and int(lab_receive):
             err = await msg.reply(tricks['errors']['lab_receive_in_progress'])
@@ -347,7 +347,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['smal_plus_timeout']))
 
     # notexec
-    if f'{prefix}зз' == msg.text.lower() and msg.reply_to_message and msg.reply_to_message.text:
+    if msg.text.lower() in [f'{prefix}зз', f'{prefix}с'] and msg.reply_to_message and msg.reply_to_message.text:
 
         title = msg.reply_to_message.text.splitlines()[0]
 

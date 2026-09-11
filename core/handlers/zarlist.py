@@ -34,7 +34,7 @@ async def zarlist_command(app: Client, msg: Message, me: User, session: async_se
 
     if not victims:
         err = await msg.reply("📝 У вас нет жертв.")
-        return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['small_timeout']))
+        return
 
     total_victims = len(victims)
     total_earn = sum(v.victim_bio_resource_earn for v in victims if v.victim_bio_resource_earn)
@@ -50,7 +50,6 @@ async def zarlist_command(app: Client, msg: Message, me: User, session: async_se
         mention = base_func.entity_create(v.victim_id, name)
         exp = intcomma(v.victim_bio_resource_earn)
         
-        # Проверяем КД
         kd_str = ""
         if kd_record:
             kd_expire = int(kd_record.kd_expire)
@@ -73,8 +72,7 @@ async def zarlist_command(app: Client, msg: Message, me: User, session: async_se
         f"<b>Список жертв:</b>\n" + "\n".join(victims_list)
     )
 
-    sended_msg = await msg.reply(text)
-    asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['huge_timeout']))
+    await msg.reply(text)
 
 
 async def zarlist_plus_command(app: Client, msg: Message, me: User, session: async_sessionmaker[AsyncSession], redis: Redis):
@@ -86,12 +84,13 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
 
     prefix = await redis.hget(f'epidemic_userbot:{me.id}', 'prefix')
 
-    if not re.fullmatch(rf'{re.escape(prefix)}\s*зз\s*\+', msg.text, re.IGNORECASE):
+    # Работает как: азз+, азз +, а зз+, а зз +, ас+, ас +, а с+, а с +
+    if not re.fullmatch(rf'{re.escape(prefix)}\s*(?:зз|с)\s*\+', msg.text, re.IGNORECASE):
         return
 
     if not msg.reply_to_message:
         err = await msg.reply("📝 Ответьте на список жертв (топ/бiotop/мои жертвы)")
-        return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['small_timeout']))
+        return
 
     try:
         text = msg.reply_to_message.text.html
@@ -100,7 +99,7 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
 
     if not text:
         err = await msg.reply("📝 Сообщение пустое.")
-        return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['small_timeout']))
+        return
 
     victims = []
     for line in text.splitlines():
@@ -109,6 +108,10 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
             continue
 
         victim_id = int(user_id_match.group(1))
+
+        # Не добавляем себя
+        if int(victim_id) == me.id:
+            continue
 
         exp_match = re.search(r'\| ([\d,\s]+) опыт', line)
         if not exp_match:
@@ -123,16 +126,12 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         potential_earn = int(total_exp * 0.10)
         diff = potential_earn - current_earn
 
-        # Не добавляем себя в список
-        if int(victim_id) == me.id:
-            continue
-
         if diff > 0:
             victims.append((victim_id, total_exp, current_earn, potential_earn, diff))
 
     if not victims:
         err = await msg.reply("📝 Нет выгодных жертв в этом списке.")
-        return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['small_timeout']))
+        return
 
     victims.sort(key=lambda x: x[4], reverse=True)
 
@@ -147,7 +146,6 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         name = victim_user[0].full_name if victim_user else str(vid)
         mention = base_func.entity_create(vid, name)
 
-        # Проверяем КД
         kd_str = ""
         if kd_record:
             kd_expire = int(kd_record.kd_expire)
@@ -178,5 +176,4 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
 
     result += f"\n\n/{code}"
 
-    sended_msg = await msg.reply(result)
-    asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['huge_timeout']))
+    await msg.reply(result)
