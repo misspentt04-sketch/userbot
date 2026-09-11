@@ -11,7 +11,7 @@ from .main_skills import main_skills
 from .helpers import helper
 from .infect_manager import self_victim_infect, auto_write_infect, stop_infect
 from .zarlist import zarlist_command, zarlist_plus_command
-from .random_commands import random_command_handler
+from .random_commands import random_command_handler, vaccine_all_command
 from .exceptions import exceptions_list_command, exception_add_command
 
 
@@ -29,5 +29,6 @@ async def setup_handlers(apps_dp: Tuple[List[Client], List[Dispatcher]]) -> None
         router.message.register(random_command_handler)
         router.message.register(exceptions_list_command)
         router.message.register(exception_add_command)
+        router.message.register(vaccine_all_command)
 
         dp.add_router(router)

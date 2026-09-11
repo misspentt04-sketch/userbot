@@ -92,44 +92,100 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
         err = await msg.reply("📝 Ответьте на список жертв (топ/бiotop/мои жертвы)")
         return
 
+    # ===== ОБРАБОТКА ФАЙЛА =====
+    if msg.reply_to_message.document:
+        try:
+            file_path = await msg.reply_to_message.download()
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_text = f.read()
+            
+            msg.reply_to_message.text = file_text
+            import os
+            os.remove(file_path)
+            print(f"[FILE] Загружен файл из реплая, {len(file_text)} символов")
+        except Exception as e:
+            print(f"[FILE ERROR] {e}")
+
+    # Безопасно получаем HTML-текст
     try:
         text = msg.reply_to_message.text.html
-    except:
+    except AttributeError:
         text = msg.reply_to_message.text or ""
 
     if not text:
         err = await msg.reply("📝 Сообщение пустое.")
         return
 
+    # ===== ЗАГРУЖАЕМ ВСЕХ ЖЕРТВ ОДНИМ ЗАПРОСОМ =====
+    async with session() as ses:
+        all_victims = await Repo.get_all_victims(ses, me.id)
+    victims_dict = {v.victim_id: v.victim_bio_resource_earn for v in all_victims}
+    
+    # Загружаем все КД одним запросом
+    async with session() as ses:
+        from core.utils.db_api import VictimKD
+        from sqlalchemy.sql import select
+        result = await ses.execute(
+            select(VictimKD).where(VictimKD.owner_id == me.id)
+        )
+        all_kd = result.scalars().all()
+    kd_dict = {k.victim_id: k.kd_expire for k in all_kd}
+
     victims = []
     for line in text.splitlines():
-        user_id_match = re.search(r'user_id=(\d+)', line)
-        if not user_id_match:
-            continue
-
-        victim_id = int(user_id_match.group(1))
-
-        # Не добавляем себя
-        if int(victim_id) == me.id:
+        # ===== УНИВЕРСАЛЬНЫЙ ПАРСИНГ =====
+        victim_id = None
+        total_exp = 0
+        
+        # Формат 1: user_id=123
+        user_id_match = re.search(r"user_id=(\d{6,16})", line)
+        if user_id_match:
+            victim_id = int(user_id_match.group(1))
+            exp_match = re.search(r"\|\s*([\d,\.]+)(k|к|M|м|K|К)?\s*опыт", line)
+            if exp_match:
+                exp_value = exp_match.group(1).replace(",", ".")
+                try:
+                    total_exp = float(exp_value)
+                    suffix = exp_match.group(2)
+                    if suffix and suffix.lower() in ["k", "к"]:
+                        total_exp *= 1000
+                    elif suffix and suffix.lower() in ["m", "м"]:
+                        total_exp *= 1000000
+                    total_exp = int(total_exp)
+                except:
+                    total_exp = 0
+            else:
+                simple = re.search(r"\|\s*([\d,]{1,64})\s*опыт", line)
+                if simple:
+                    total_exp = int(simple.group(1).replace(",", ""))
+        else:
+            # Формат 2: "1. @826461867 | 10485075"
+            file_match = re.search(r"\d+\.\s*@(\d{6,16})\s*\|\s*(\d+)", line)
+            if file_match:
+                victim_id = int(file_match.group(1))
+                total_exp = int(file_match.group(2))
+            else:
+                simple_file = re.search(r"@(\d{6,16})\s*\|\s*(\d+)", line)
+                if simple_file:
+                    victim_id = int(simple_file.group(1))
+                    total_exp = int(simple_file.group(2))
+                else:
+                    at_id = re.search(r"@(\d{6,16})", line)
+                    if at_id:
+                        victim_id = int(at_id.group(1))
+                        total_exp = 0
+        
+        if not victim_id:
             continue
         
-        # Проверяем исключения
-        from core.utils.db_api.repo import ExceptionsRepo
-        async with session() as ses:
-            is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(victim_id))
-        if is_exc:
+        if len(str(victim_id)) < 6 or len(str(victim_id)) > 16:
+            continue
+        
+        if int(victim_id) == me.id:
             continue
 
-        exp_match = re.search(r'\| ([\d,\s]+) опыт', line)
-        if not exp_match:
-            continue
-
-        total_exp = int(exp_match.group(1).replace(',', '').replace(' ', ''))
-
-        async with session() as ses:
-            victim = await Repo.get_victim(ses, me.id, victim_id)
-
-        current_earn = victim[0].victim_bio_resource_earn if victim else 0
+        # Берём из кэша (без запроса к БД)
+        current_earn = victims_dict.get(victim_id, 0)
         potential_earn = int(total_exp * 0.10)
         diff = potential_earn - current_earn
 
@@ -144,18 +200,17 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
 
     now = int(time.time())
 
+    # УСКОРЕНО: получаем имена только для топ-10
     victims_list = []
-    for i, (vid, total, current, potential, diff) in enumerate(victims[:30], 1):
-        async with session() as ses:
-            victim_user = await Repo.get_user(ses, vid)
-            kd_record = await Repo.get_victim_kd(ses, me.id, vid)
+    for i, (vid, total, current, potential, diff) in enumerate(victims[:10], 1):
+        # Только ID, без запроса к БД
+        mention = base_func.entity_create(vid, str(vid))
 
-        name = victim_user[0].full_name if victim_user else str(vid)
-        mention = base_func.entity_create(vid, name)
-
+        # КД из кэша
         kd_str = ""
-        if kd_record:
-            kd_expire = int(kd_record.kd_expire)
+        kd_expire = kd_dict.get(vid)
+        if kd_expire:
+            kd_expire = int(kd_expire)
             if kd_expire > now:
                 kd_left = kd_expire - now
                 kd_minutes = kd_left // 60
@@ -171,16 +226,46 @@ async def zarlist_plus_command(app: Client, msg: Message, me: User, session: asy
             f"   📊 {intcomma(current)} → <b>{intcomma(potential)}</b> 🧬 (+{intcomma(diff)})"
         )
 
-    result = (
-        f"🎯 <b>Выгодные жертвы ({len(victims)}):</b>\n\n"
-        + "\n".join(victims_list)
-    )
-
     from .random_commands import generate_random_code, save_random_command
     code = generate_random_code(5)
     victim_ids = [v[0] for v in victims]
     await save_random_command(redis, me.id, code, 'infect_plus', {'victims': victim_ids})
 
-    result += f"\n\n/{code}"
-
-    await msg.reply(result)
+    # Если больше 50 выгодных — отправляем ФАЙЛОМ
+    if len(victims) > 50:
+        # Создаём файл с ID
+        file_content = "\n".join([str(vid) for vid in victim_ids])
+        file_path = f"/tmp/victims_plus_{me.id}_{code}.txt"
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(file_content)
+        
+        try:
+            # Отправляем файл
+            with open(file_path, 'rb') as f:
+                await msg.reply_document(
+                    document=f,
+                    file_name=f"victims_{len(victims)}_{code}.txt",
+                    caption=f"🎯 Выгодные жертвы ({len(victims)})\n\nНапиши /{code} для заражения"
+                )
+            import os
+            os.remove(file_path)
+            print(f"[FILE] Отправил {len(victims)} ID")
+        except Exception as e:
+            print(f"[FILE ERROR] {e}")
+            err = await msg.reply(f"❌ Ошибка отправки файла: {e}")
+        
+        # Отправляем первые 10 в сообщении
+        top_10 = victims_list[:10]
+        await msg.reply_to_message.reply(
+            f"🎯 <b>Выгодные жертвы (топ-10 из {len(victims)}):</b>\n\n" + "\n".join(top_10) + f"\n\n<i>Остальные в файле выше. Код: /{code}</i>"
+        )
+    else:
+        # Маленький список — отправляем сообщением
+        result = (
+            f"🎯 <b>Выгодные жертвы ({len(victims)}):</b>\n\n"
+            + "\n".join(victims_list)
+        )
+        result += f"\n\n/{code}"
+        
+        await msg.reply(result)

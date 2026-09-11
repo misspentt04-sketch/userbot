@@ -4,7 +4,6 @@ import sys
 
 from pyrogram import Client
 
-# Добавляем путь к проекту
 sys.path.insert(0, os.path.abspath('.'))
 
 from core.utils.db_api import UserUserBot, UserUserBotData
@@ -15,13 +14,11 @@ from datetime import datetime, timedelta
 
 
 async def add_userbot_to_db(owner_id: int, api_id: int, api_hash: str, phone: str):
-    """Добавляет юзербота в БД"""
     engine = create_async_engine(url=settings.db_url.get_secret_value(), echo=False)
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     
     async with sessionmaker() as session:
         async with session.begin():
-            # Проверяем, есть ли уже такой юзербот
             existing = await session.execute(
                 select(UserUserBot).where(UserUserBot.owner_id == owner_id)
             )
@@ -29,13 +26,8 @@ async def add_userbot_to_db(owner_id: int, api_id: int, api_hash: str, phone: st
             
             if existing:
                 print(f"⚠️ Юзербот для {owner_id} уже есть в БД (id={existing.id})")
-                # Обновляем данные
-                await session.execute(
-                    select(UserUserBotData).where(UserUserBotData.ub_id == existing.id)
-                )
                 return existing.id
             
-            # Создаём нового
             result = await session.execute(
                 insert(UserUserBot).values(owner_id=owner_id, status=True)
             )
@@ -57,13 +49,10 @@ async def add_userbot_to_db(owner_id: int, api_id: int, api_hash: str, phone: st
 
 
 async def create_session(owner_id: int, api_id: int, api_hash: str, phone: str):
-    """Создаёт сессию Pyrogram"""
     session_path = f"core/sessions/{owner_id}"
     
-    # Создаём папку
     os.makedirs("core/sessions", exist_ok=True)
     
-    # Проверяем, есть ли уже сессия
     if os.path.exists(f"{session_path}.session"):
         answer = input(f"⚠️ Сессия {session_path}.session уже существует. Пересоздать? (y/n): ")
         if answer.lower() != 'y':
@@ -106,27 +95,23 @@ async def main():
     print("=" * 50)
     print()
     
-    # 1. ID владельца
     owner_id_input = input("👤 Введите ID владельца (например, 7972320837): ").strip()
     if not owner_id_input.isdigit():
         print("❌ ID должен быть числом!")
         return
     owner_id = int(owner_id_input)
     
-    # 2. API ID
     api_id_input = input("🔑 Введите API ID (с my.telegram.org): ").strip()
     if not api_id_input.isdigit():
         print("❌ API ID должен быть числом!")
         return
     api_id = int(api_id_input)
     
-    # 3. API HASH
     api_hash = input("🔑 Введите API HASH: ").strip()
     if not api_hash:
         print("❌ API HASH не может быть пустым!")
         return
     
-    # 4. Номер телефона
     phone = input("📱 Введите номер телефона (например, +79123456789): ").strip()
     if not phone.startswith('+'):
         print("❌ Номер должен начинаться с +")
@@ -146,11 +131,9 @@ async def main():
         print("❌ Отменено")
         return
     
-    # Создаём сессию
     success = await create_session(owner_id, api_id, api_hash, phone)
     
     if success:
-        # Добавляем в БД
         print()
         print("💾 Добавляем в БД...")
         try:
@@ -163,7 +146,7 @@ async def main():
         print("✅ ГОТОВО!")
         print("=" * 50)
         print(f"📁 Сессия: core/sessions/{owner_id}.session")
-        print(f"🚀 Запустите: python app.py")
+        print(f"🚀 Запустите: sudo systemctl restart epidemic-userbot")
     else:
         print()
         print("❌ Не удалось создать сессию")

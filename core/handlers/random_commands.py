@@ -40,7 +40,7 @@ async def send_buy_vaccine(app: Client):
     """Отправляет .Купить вакцину в ЛС бота"""
     try:
         await app.send_message(tricks['game']['bot_username'], '.Купить вакцину')
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)
         print("[VACCINE] Отправил .Купить вакцину")
     except Exception as e:
         print(f"[VACCINE ERROR] {e}")
@@ -151,6 +151,43 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
         sended_msg = await msg.reply(f"🦠 Заражено (выгодных): {count} жертв")
         asyncio.create_task(respond_func.delete_msg([sended_msg], tricks['config']['medium_timeout']))
 
+    elif action == 'infect_file':
+        victims = action_data.get('victims', [])
+        if not victims:
+            return
+        
+        # Отправляем .Купить вакцину
+        await send_buy_vaccine(app)
+        
+        count = 0
+        for victim_id in victims:
+            if int(victim_id) == me.id:
+                continue
+            
+            # Проверяем исключения
+            from core.utils.db_api.repo import ExceptionsRepo
+            async with session() as ses:
+                is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(victim_id))
+            if is_exc:
+                continue
+            
+            infect_is_stop = await redis.get(f'epidemic_userbot_infect_stop:{me.id}')
+            if infect_is_stop and int(infect_is_stop) == 1:
+                await redis.set(f'epidemic_userbot_infect_stop:{me.id}', 0)
+                sended_msg = await msg.reply(f"🛑 Заражение остановлено! Заразил: {count}")
+                asyncio.create_task(respond_func.delete_msg([sended_msg], tricks['config']['medium_timeout']))
+                return
+            
+            try:
+                await app.send_message(msg.chat.id, f'Заразить @{victim_id}')
+                count += 1
+                await asyncio.sleep(1.2)
+            except Exception as e:
+                print(f"[FILE INJECT ERROR] {e}")
+        
+        sended_msg = await msg.reply(f"🦠 Заражено из файла: {count} жертв")
+        asyncio.create_task(respond_func.delete_msg([sended_msg], tricks['config']['medium_timeout']))
+
     elif action == 'infect_one':
         victim_id = action_data.get('victim_id')
         if not victim_id:
@@ -173,3 +210,41 @@ async def random_command_handler(app: Client, msg: Message, me: User, session: a
             sended_msg = await msg.reply(f"❌ Ошибка: {e}")
 
         asyncio.create_task(respond_func.delete_msg([sended_msg], tricks['config']['medium_timeout']))
+
+
+async def vaccine_all_command(app: Client, msg: Message, me: User, session: async_sessionmaker[AsyncSession], redis: Redis):
+    """Команда 'тк' — каждый юзербот покупает вакцину САМ ЗА СЕБЯ"""
+    
+    # Проверяем команду
+    if msg.text.lower().strip() != 'тк':
+        return
+    
+    # Проверяем доступ (только для этого юзербота)
+    trusted_ids = await redis.lrange(f'epidemic_userbot_trusted:{me.id}', 0, -1)
+    
+    if msg.from_user.id != me.id and str(msg.from_user.id) not in trusted_ids:
+        return
+    
+    # Этот юзербот отправляет .Купить вакцину САМ
+    try:
+        sent = await app.send_message(tricks['game']['bot_username'], '.Купить вакцину')
+        
+        # Ждём ответа (до 3 сек)
+        response_text = None
+        for _ in range(10):
+            await asyncio.sleep(0.3)
+            reply = await app.get_messages(tricks['game']['bot_username'], message_ids=sent.id + 1)
+            if not reply.empty and reply.text:
+                response_text = reply.text
+                break
+        
+        # Отвечаем в чат
+        if response_text:
+            if 'Вы здоровы' in response_text or 'излечились' in response_text or 'Затраты на лечение' in response_text or '✅' in response_text:
+                await msg.reply(f"✅ <b>Вакцина куплена!</b> — <code>{me.id}</code>")
+            else:
+                await msg.reply(f"❌ <b>Вакцина не куплена!</b> — <code>{me.id}</code>")
+        else:
+            await msg.reply(f"❌ <b>Вакцина не куплена!</b> — <code>{me.id}</code>\n└ Ответ не получен")
+    except Exception as e:
+        await msg.reply(f"❌ <b>Ошибка</b> — <code>{me.id}</code>\n└ {str(e)[:100]}")

@@ -3,7 +3,7 @@ import textwrap as tw
 tricks = {
     'config': {
         'list_infect_delay': 2,
-        'lab_get_delay': 1.7,
+        'lab_get_delay': 0.5,
         'small_timeout': 8,
         'smal_plus_timeout': 12,
         'medium_timeout': 16,

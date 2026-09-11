@@ -30,6 +30,44 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
     if msg.from_user.id != me.id and str(msg.from_user.id) not in trusted_ids:
         return
 
+    # ===== ОБРАБОТКА ФАЙЛОВ =====
+    # Если это файл — скачиваем и подменяем msg.text
+    if msg.document:
+        try:
+            file_path = await msg.download()
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_text = f.read()
+            
+            # Подменяем текст сообщения на содержимое файла
+            msg.text = file_text
+            
+            # Удаляем временный файл
+            import os
+            os.remove(file_path)
+            
+            print(f"[FILE] Загружен файл, {len(file_text)} символов")
+        except Exception as e:
+            print(f"[FILE ERROR] {e}")
+            return
+    
+    # Аналогично для реплая на файл
+    if msg.reply_to_message and msg.reply_to_message.document:
+        try:
+            file_path = await msg.reply_to_message.download()
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_text = f.read()
+            
+            # Подменяем текст реплая на содержимое файла
+            msg.reply_to_message.text = file_text
+            
+            import os
+            os.remove(file_path)
+            
+            print(f"[FILE] Загружен файл из реплая, {len(file_text)} символов")
+        except Exception as e:
+            print(f"[FILE ERROR] {e}")
+            return
+
     if msg.reply_to_message:
         reply_text = msg.reply_to_message.text
 
@@ -252,9 +290,9 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
 
     # check victim (оп, о, с) — работает с ЛЮБЫМ реплаем, КРОМЕ списков
     if (
-        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о|с)\s' + trg.re_link_sup, msg.text, re.IGNORECASE)
+        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о|с|чк)\s' + trg.re_link_sup, msg.text, re.IGNORECASE)
         or
-        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о|с)', msg.text, re.IGNORECASE) and msg.reply_to_message and (
+        re.fullmatch('(' + re.escape(prefix) + r'|)(оп|о|с|чк)', msg.text, re.IGNORECASE) and msg.reply_to_message and (
             not msg.reply_to_message.text or
             msg.reply_to_message.text.splitlines()[0] not in tricks['game_texts']['notexec_allow_list']
         )
@@ -397,7 +435,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['smal_plus_timeout']))
 
     # notexec (азз, ас)
-    if msg.text.lower() in [f'{prefix}зз', f'{prefix}с'] and msg.reply_to_message and msg.reply_to_message.text:
+    if msg.text.lower() in [f'{prefix}зз', f'{prefix}с', f'{prefix}чк'] and msg.reply_to_message and msg.reply_to_message.text:
 
         title = msg.reply_to_message.text.splitlines()[0]
 
@@ -418,29 +456,116 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         victim_ids_for_infect = []
 
         async with session() as ses:
-            for r in msg.reply_to_message.text.html.splitlines():
-                if '?user_id=' in r:
-                    num += 1
-                    id = re.search(r'\?user_id=(\d{4,16})">.+</a>', r).group(1)
-                    name = re.search(r'\?user_id=\d{4,16}">(.+)</a>', r).group(1)
-                    if title == biotop or title == biotop_chat:
-                        exp = int(re.search(r'\| ([\d,]{1,64}) опыт', r).group(1).replace(',', ''))
-                    elif title == my_victims:
-                        exp = int(re.search(r'\| (\+[,\d]{1,64}) \|', r).group(1).replace(',', ''))
-                    victim = await Repo.get_victim(ses, me.id, id)
-                    victim_user = await Repo.get_user(ses, id)
+            # Безопасно получаем HTML-текст
+            try:
+                html_text = msg.reply_to_message.text.html
+            except AttributeError:
+                # text уже строка
+                html_text = msg.reply_to_message.text or ""
+            
+            for r in html_text.splitlines():
+                # ===== УНИВЕРСАЛЬНЫЙ ПАРСИНГ =====
+                victim_id = None
+                victim_name = None
+                
+                # 1. Формат "1. @826461867 | 10485075" (файл)
+                file_match = re.search(r'\d+\.\s*@(\d{6,16})\s*\|\s*(\d+)', r)
+                if file_match:
+                    victim_id = file_match.group(1)
+                    victim_name = victim_id
+                else:
+                    # 2. user_id=123 (старый формат)
+                    user_id_match = re.search(r'user_id=(\d{4,16})', r)
+                    if user_id_match:
+                        victim_id = user_id_match.group(1)
+                        name_match = re.search(r'user_id=\d{4,16}[\">]*([^<\n]+)', r)
+                        victim_name = name_match.group(1).strip() if name_match else str(victim_id)
+                    else:
+                        # 3. @123456789 (числовой username)
+                        at_id_match = re.search(r'@(\d{6,16})', r)
+                        if at_id_match:
+                            victim_id = at_id_match.group(1)
+                            victim_name = victim_id
+                        else:
+                            # 4. @username (текстовый)
+                            at_username_match = re.search(r'@([a-zA-Z0-9_]{5,32})', r)
+                            if at_username_match and not at_username_match.group(1).isdigit():
+                                try:
+                                    entity = await app.get_users(at_username_match.group(1))
+                                    victim_id = entity.id
+                                    victim_name = entity.full_name
+                                except:
+                                    victim_id = None
+                            else:
+                                # 5. Просто ID (6-16 цифр)
+                                simple_id_match = re.search(r'(?:^|\s|\d+\.\s)(\d{6,16})(?:\s|\||$)', r)
+                                if simple_id_match:
+                                    victim_id = simple_id_match.group(1)
+                                    victim_name = victim_id
+                
+                if not victim_id:
+                    continue
+                
+                # Проверяем, что ID — число
+                if not str(victim_id).isdigit():
+                    continue
+                
+                # Проверяем длину ID (6-16 цифр)
+                if len(str(victim_id)) < 6 or len(str(victim_id)) > 16:
+                    continue
+                
+                id = victim_id
+                name = victim_name or str(victim_id)
+                num += 1
+                # Парсим опыт — универсально
+                exp = 0
+                if title == biotop or title == biotop_chat:
+                    # Формат 1: | 10485,1k опыта
+                    exp_match = re.search(r'\|\s*([\d,\.]+)(k|к|M|м|K|К)?\s*опыт', r)
+                    if exp_match:
+                        exp_value = exp_match.group(1).replace(',', '.')
+                        try:
+                            exp = float(exp_value)
+                            suffix = exp_match.group(2)
+                            if suffix and suffix.lower() in ['k', 'к']:
+                                exp *= 1000
+                            elif suffix and suffix.lower() in ['m', 'м']:
+                                exp *= 1000000
+                            exp = int(exp)
+                        except:
+                            exp = 0
+                    else:
+                        # Формат 2: | 10485075 (просто число)
+                        simple_exp = re.search(r'\|\s*(\d{1,16})\s*$', r)
+                        if simple_exp:
+                            try:
+                                exp = int(simple_exp.group(1))
+                            except:
+                                exp = 0
+                        else:
+                            # Формат 3: | 10485 опыт (старый)
+                            old_match = re.search(r'\|\s*([\d,]{1,64})\s*опыт', r)
+                            if old_match:
+                                try:
+                                    exp = int(old_match.group(1).replace(',', ''))
+                                except:
+                                    exp = 0
+                elif title == my_victims:
+                    exp = int(re.search(r'\| (\+[,\d]{1,64}) \|', r).group(1).replace(',', ''))
+                victim = await Repo.get_victim(ses, me.id, id)
+                victim_user = await Repo.get_user(ses, id)
 
-                    # Проверяем исключения
-                    from core.utils.db_api.repo import ExceptionsRepo
-                    is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(id))
+                # Проверяем исключения
+                from core.utils.db_api.repo import ExceptionsRepo
+                is_exc = await ExceptionsRepo.is_exception(ses, me.id, int(id))
 
-                    # Пропускаем себя и исключённых
-                    if int(id) == me.id or is_exc:
+                # Пропускаем себя и исключённых
+                if int(id) == me.id or is_exc:
                         continue
 
-                    victim_ids_for_infect.append(int(id))
+                victim_ids_for_infect.append(int(id))
 
-                    if victim:
+                if victim:
                         mention = base_func.entity_create(id, victim_user[0].full_name)
                         mention_nostyle = mention
                         plus_exp = int(exp*0.10)-victim[0].victim_bio_resource_earn
@@ -473,19 +598,44 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                             f'{num}. {mention_nostyle if title == my_victims else mention} '
                             f'{plus_exp_nostyle if title == my_victims else plus_exp}'
                         )
-                    else:
-                        mention = base_func.entity_create(id, name)
-                        get_exp = (1 if int(exp*0.10) <= 0 else intcomma(int(exp*0.10)))
-                        text = f'{num}. {mention} {f"+<b>{get_exp}</b>" if title == my_victims else f"+{get_exp}"} ✨'
-                    victims_list.append(text)
+                else:
+                    mention = base_func.entity_create(id, name)
+                    get_exp = (1 if int(exp*0.10) <= 0 else intcomma(int(exp*0.10)))
+                    text = f'{num}. {mention} {f"+<b>{get_exp}</b>" if title == my_victims else f"+{get_exp}"} ✨'
+                victims_list.append(text)
 
         from .random_commands import generate_random_code, save_random_command
         code = generate_random_code(5)
         await save_random_command(redis, me.id, code, 'infect_all', {'victims': victim_ids_for_infect})
 
-        victims_list.append(f"\n/{code}")
-
-        send_msg = await msg.reply_to_message.reply('\n'.join(victims_list))
+        # Если больше 50 жертв — отправляем ФАЙЛОМ
+        if len(victim_ids_for_infect) > 50:
+            # Создаём файл с ID
+            file_content = "\n".join([str(vid) for vid in victim_ids_for_infect])
+            file_path = f"/tmp/victims_{me.id}_{code}.txt"
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(file_content)
+            
+            # Отправляем файл
+            from pyrogram.types import InputMediaDocument
+            try:
+                sent_file = await msg.reply_document(
+                    document=file_path,
+                    caption=f"🦠 <b>Список жертв ({len(victim_ids_for_infect)})</b>\n\nНапиши <code>/{code}</code> для заражения",
+                    parse_mode="HTML"
+                )
+                import os
+                os.remove(file_path)
+                print(f"[FILE] Отправил файл с {len(victim_ids_for_infect)} ID")
+            except Exception as e:
+                print(f"[FILE ERROR] {e}")
+            
+            # Отправляем только список жертв (без кода)
+            send_msg = await msg.reply_to_message.reply('\n'.join(victims_list) + f"\n\n<i>Код для заражения в файле выше</i>")
+        else:
+            victims_list.append(f"\n/{code}")
+            send_msg = await msg.reply_to_message.reply('\n'.join(victims_list))
         asyncio.create_task(respond_func.delete_msg([send_msg, msg], tricks['config']['huge_timeout']))
 
     # change prifix

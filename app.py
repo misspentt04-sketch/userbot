@@ -103,12 +103,19 @@ async def start_clients(session: async_sessionmaker[AsyncSession], redis: Redis)
     # Invoke start method of all clients & dispatchers
     await asyncio.gather(*[c.start() for c in apps_dp[0]])
     
+    from core.userbot_manager import set_clients
+    clients_dict = {}
+    
     for app in apps_dp[0]:
         me = await app.get_me()
+        clients_dict[me.id] = app
         dp = Dispatcher(app, me=me, session=session, redis=redis, run_logic=RunLogic.UNLIMITED)
         dp.message.filter(filters.text & is_user & ~filters.forwarded & (filters.private | filters.group))
         apps_dp[1].append(dp)
     
+    set_clients(clients_dict)
+    print(f"[APP] Сохранено {len(clients_dict)} клиентов")
+
     return apps_dp
 
 # Looped tasks
