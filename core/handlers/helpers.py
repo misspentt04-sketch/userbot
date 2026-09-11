@@ -55,7 +55,7 @@ async def helper(app: Client, msg: Message, me: User, session: async_sessionmake
             ) % {'prefix': prefix.title(), 'me_id': me.id, 'bot_username': tricks['game']['bot_username']}
         )
         
-        sended_msg = await msg.reply(text, disable_web_page_preview=True)
+        sended_msg = await msg.reply(text)
         asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['6_minutes_timeout']))
 
 

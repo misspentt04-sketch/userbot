@@ -124,7 +124,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                         return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['medium_timeout']))
                         
                     
-                    msg_infect = await msg_to.reply(f'Заразить @{lnk}', quote=quote)
+                    msg_infect = await msg_to.reply(f'Заразить @{lnk}')
                     exp = 0
                     async with session() as ses:
                         user = await Repo.get_user(ses, lnk)
@@ -148,14 +148,14 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                 if get_victim:
                     exp = get_victim[0].victim_bio_resource_earn
         
-        msg_infect = await msg_to.reply(text, quote=quote)
+        msg_infect = await msg_to.reply(text)
         await redis.lpush(f'epidemic_userbot_victim:{me.id}:{link}', f'{msg_infect.id}:{exp}')
         await redis.expire(f'epidemic_userbot_victim:{me.id}:{link}', 6)
         if not list_infect: await msg.delete()
     
     # Buy vaccine
     if msg.text.lower() == f'{prefix}х':
-        await msg.reply(tricks['triggers']['buy_vaccine'], quote=False)
+        await msg.reply(tricks['triggers']['buy_vaccine'])
         await msg.delete()
     
     # Get small info about lab
@@ -311,7 +311,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         
         # trigger on all trusted by o, but solve problem with spam by trusted users
         if prefix in msg.text.split()[0]:
-            sended_msg = await msg.reply(text, quote=False)
+            sended_msg = await msg.reply(text)
         else:
             sended_msg = await msg.reply(text)
         asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['smal_plus_timeout']))
@@ -351,7 +351,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                     if victim:
                         mention = base_func.entity_create(id, victim_user[0].full_name)
                         mention_nostyle = mention
-                        plus_exp = int(exp*0.20)-victim[0].victim_bio_resource_earn
+                        plus_exp = int(exp*0.10)-victim[0].victim_bio_resource_earn
                         mention = (f'<b>{mention}</b>' if plus_exp>0 else f'<i>{mention}</i>')
                         plus_exp_nostyle = (f'+{intcomma(plus_exp)} 🧬' if plus_exp>0 else f'{intcomma(plus_exp)} ☁️')
                         if plus_exp == 0:
@@ -366,7 +366,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
                         )
                     else:
                         mention = base_func.entity_create(id, name)
-                        get_exp = (1 if int(exp*0.20) <= 0 else intcomma(int(exp*0.20)))
+                        get_exp = (1 if int(exp*0.10) <= 0 else intcomma(int(exp*0.10)))
                         text = f'{num}. {mention} {f"+<b>{get_exp}</b>" if title == my_victims else f"+{get_exp}"} ✨'
                     victims_list.append(text)
         
@@ -411,7 +411,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         
         text = base_func.skills_calc(skill, from_lvl, to_lvl)
         
-        sended_msg = await msg.reply(text, quote=False)
+        sended_msg = await msg.reply(text)
         asyncio.create_task(respond_func.delete_msg([sended_msg, msg], tricks['config']['huge_timeout']))
     
 

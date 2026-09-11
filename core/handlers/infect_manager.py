@@ -92,7 +92,10 @@ async def auto_write_infect(app: Client, msg: Message, me: User, session: async_
             bio_resource, victimer_mention
         )
         
-        await app.edit_message_text(msg.chat.id, links, text)
+        try:
+            await app.edit_message_text(msg.chat.id, links, text)
+        except Exception as e:
+            print(f"[EDIT ERROR] {e}")
 
 
 async def stop_infect(app: Client, msg: Message, me: User, session: async_sessionmaker[AsyncSession], redis: Redis):

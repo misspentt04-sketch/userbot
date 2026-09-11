@@ -49,5 +49,7 @@ CREATE TABLE IF NOT EXISTS UserbotVictims(
     )
 
 
+    op.execute(sql)
+
 def downgrade() -> None:
     pass

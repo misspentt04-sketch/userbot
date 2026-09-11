@@ -1,6 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.handlers import MessageHandler
-from dispyro import Dispatcher
+from dispyro import Dispatcher, Router
 
 from typing import List, Tuple
 
@@ -11,15 +10,23 @@ from core.filters.is_infect import infect
 from .main_skills import main_skills
 from .helpers import helper
 from .infect_manager import self_victim_infect, auto_write_infect, stop_infect
+from .zarlist import zarlist_command
 
 
 async def setup_handlers(apps_dp: Tuple[List[Client], List[Dispatcher]]) -> None:
-    # Loop through all dispatchers and register handlers
+    """Регистрирует хендлеры в роутерах для каждого диспетчера"""
+
     for dp in apps_dp[1]:
-        dp.message.register(main_skills)
-        dp.message.register(helper)
-        dp.message.register(self_victim_infect, filters.me & infect)
-        dp.message.register(auto_write_infect, filters.user(tricks['game']['bot_id']))
-        dp.message.register(stop_infect, filters.regex('б стоп'))
+        # Создаём роутер
+        router = Router(name=f"router_{id(dp)}")
 
+        # Регистрируем хендлеры через методы роутера
+        router.message.register(main_skills)
+        router.message.register(helper)
+        router.message.register(self_victim_infect, filters.me & infect)
+        router.message.register(auto_write_infect, filters.user(tricks['game']['bot_id']))
+        router.message.register(stop_infect, filters.regex('б стоп'))
+        router.message.register(zarlist_command)
 
+        # Добавляем роутер в диспетчер
+        dp.add_router(router)
