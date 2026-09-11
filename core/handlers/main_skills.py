@@ -80,7 +80,7 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         or
         re.fullmatch(f'{re.escape(prefix)}б' + r'\s{1,3}' + r'(\d{1,2}\s{1,3}|)' + trg.re_link_sup, msg.text, re.IGNORECASE)
         or
-        re.fullmatch(f'{prefix}б' + r'(\s{1,3}\d{1,2}|)', msg.text.lower()) and msg.reply_to_message and (
+        re.fullmatch(f'{prefix}б' + r'(\s+[\d\s\-]+|)', msg.text.lower()) and msg.reply_to_message and (
             reply_text and msg.reply_to_message.text.lower().startswith(tricks['game_texts']['sec_serv']) or
             reply_text and
             re.findall(r'🦠 .+ подвер[гла]{1,3} заражению', msg.reply_to_message.text.splitlines()[0], re.IGNORECASE)
@@ -88,12 +88,28 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             msg.reply_to_message.entities and
             len(msg.reply_to_message.entities) == 1
         ) or
+        (
+            msg.reply_to_message and
+            msg.reply_to_message.document and
+            re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[\d\s\-]+', msg.text, re.IGNORECASE)
+        ) or
+        (
+            msg.reply_to_message and
+            msg.reply_to_message.document and
+            re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[-\d\s]+', msg.text, re.IGNORECASE)
+        ) or
+        (
+            msg.reply_to_message and
+            reply_text and
+            re.search(r'@\d{6,16}', msg.reply_to_message.text) and
+            re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[-\d\s]+', msg.text, re.IGNORECASE)
+        ) or
         msg.reply_to_message and (
             reply_text and '@' in msg.reply_to_message.text
             or
             msg.reply_to_message.entities and len(msg.reply_to_message.entities) >= 1
         ) and
-        re.fullmatch(f'{re.escape(prefix)}б' + r'\s{1,3}([-\d\s]{1,20})', msg.text, re.IGNORECASE)
+        re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[-\d\s]+', msg.text, re.IGNORECASE)
     ):
         quote = False
         list_infect = False
@@ -132,11 +148,38 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             link = msg.reply_to_message.from_user.id
         elif (
             msg.reply_to_message and
-            re.fullmatch(f'{re.escape(prefix)}б' + r'\s{1,3}([-\d\s]{1,20})', msg.text, re.IGNORECASE)
+            re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[-\d\s]+', msg.text, re.IGNORECASE)
         ):
             list_infect = True
-            link = [base_func.link_getter(link) for link in msg.reply_to_message.text.html.splitlines() if base_func.link_getter(link)]
+            print(f"[AB DEBUG] text={msg.text!r}")
+            print(f"[AB DEBUG] reply_text={msg.reply_to_message.text!r}")
+            print(f"[AB DEBUG] is_document={bool(msg.reply_to_message.document)}")
+            # Парсим строки: чистый ID, @ID, @username, tg:// или \n-разделители
+            link = []
+            raw_text = msg.reply_to_message.text
+            # Заменяем литеральный \n на реальный перенос
+            raw_text = raw_text.replace('\\n', '\n')
+            for line in raw_text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Чистый ID
+                if re.fullmatch(r'\d{6,16}', line):
+                    link.append(int(line))
+                    continue
+                # @123456789 — ID с @
+                at_id = re.search(r'@(\d{6,16})', line)
+                if at_id:
+                    link.append(int(at_id.group(1)))
+                    continue
+                # @username или tg://
+                got = base_func.link_getter(line)
+                if got:
+                    link.append(got)
+            print(f"[AB DEBUG] link={link[:5]}... (всего {len(link)})")
+            print(f"[AB DEBUG] link_count={len(link)}")
             nums = msg.text.split()[1:]
+            print(f"[AB DEBUG] nums={nums!r}")
             nums_list = []
             links_list = []
             for num in nums:
