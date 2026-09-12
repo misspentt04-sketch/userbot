@@ -100,6 +100,12 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
         ) or
         (
             msg.reply_to_message and
+            msg.reply_to_message.text and
+            'user_id=' in str(msg.reply_to_message.text) and
+            re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[-\d\s]+', msg.text, re.IGNORECASE)
+        ) or
+        (
+            msg.reply_to_message and
             reply_text and
             re.search(r'@\d{6,16}', msg.reply_to_message.text) and
             re.fullmatch(f'{re.escape(prefix)}б' + r'\s+[-\d\s]+', msg.text, re.IGNORECASE)
@@ -154,28 +160,29 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             print(f"[AB DEBUG] text={msg.text!r}")
             print(f"[AB DEBUG] reply_text={msg.reply_to_message.text!r}")
             print(f"[AB DEBUG] is_document={bool(msg.reply_to_message.document)}")
-            # Парсим строки: чистый ID, @ID, @username, tg:// или \n-разделители
+            # Парсим: берём HTML (там tg:// ссылки), потом plain text
             link = []
-            raw_text = msg.reply_to_message.text
-            # Заменяем литеральный \n на реальный перенос
-            raw_text = raw_text.replace('\\n', '\n')
+            try:
+                raw_html = msg.reply_to_message.text.html
+            except AttributeError:
+                raw_html = msg.reply_to_message.text or ""
+            # Ищем user_id= и @ID в HTML
+            all_ids = re.findall(r'user_id=(\d{6,16})', raw_html)
+            all_ids += re.findall(r'@(\d{6,16})', raw_html)
+            # Плюс чистые ID из plain text
+            raw_text = (msg.reply_to_message.text or "").replace('\\n', '\n')
             for line in raw_text.splitlines():
                 line = line.strip()
-                if not line:
-                    continue
-                # Чистый ID
                 if re.fullmatch(r'\d{6,16}', line):
-                    link.append(int(line))
-                    continue
-                # @123456789 — ID с @
-                at_id = re.search(r'@(\d{6,16})', line)
-                if at_id:
-                    link.append(int(at_id.group(1)))
-                    continue
-                # @username или tg://
-                got = base_func.link_getter(line)
-                if got:
-                    link.append(got)
+                    all_ids.append(line)
+            # Уникальные, сохраняя порядок
+            seen = set()
+            link = []
+            for x in all_ids:
+                xi = int(x)
+                if xi not in seen:
+                    seen.add(xi)
+                    link.append(xi)
             print(f"[AB DEBUG] link={link[:5]}... (всего {len(link)})")
             print(f"[AB DEBUG] link_count={len(link)}")
             nums = msg.text.split()[1:]
@@ -261,13 +268,14 @@ async def main_skills(app: Client, msg: Message, me: User, session: async_sessio
             return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['small_timeout']))
         await redis.hset(f'epidemic_userbot:{me.id}', 'lab_receive_progress', 1)
 
-        lab = await respond_func.get_lab(app, me)
+        try:
+            lab = await respond_func.get_lab(app, me)
+        finally:
+            await redis.hset(f'epidemic_userbot:{me.id}', 'lab_receive_progress', 0)
 
         if not lab:
             err = await msg.reply(tricks['errors']['something_went_wrong'])
-            await redis.hset(f'epidemic_userbot:{me.id}', 'lab_receive_progress', 0)
             return asyncio.create_task(respond_func.delete_msg([err, msg], tricks['config']['medium_timeout']))
-        await redis.hset(f'epidemic_userbot:{me.id}', 'lab_receive_progress', 0)
 
         msg_lab = await msg.reply('<blockquote>' + '\n'.join(lab) + '</blockquote>')
         asyncio.create_task(respond_func.delete_msg([msg_lab, msg], tricks['config']['medium_timeout']))
